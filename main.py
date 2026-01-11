@@ -1,21 +1,16 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
+import pandas as pd
 
 class SistemKasir:
-    def __init__(self, root):
+    def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("Sistem Kasir Sederhana - Python Tkinter")
-        self.root.geometry("600x500")
+        # self.root.geometry("600x500")
 
-        # --- 1. DATA PRODUK (Database Sederhana) ---
-        # Format: {'Nama Produk': Harga}
-        self.data_produk = {
-            "Nasi Goreng": 15000,
-            "Mie Ayam": 12000,
-            "Es Teh Manis": 5000,
-            "Kopi Hitam": 8000,
-            "Air Mineral": 4000
-        }
+        # --- 1. DATA PRODUK (Baca dari Excel) ---
+        # Format: {'PLU': {'nama': 'Nama Produk', 'harga': Harga}}
+        self.data_produk = self.load_produk_dari_excel()
         
         # Variabel untuk menyimpan total belanja
         self.total_belanja = 0
@@ -32,7 +27,9 @@ class SistemKasir:
 
         # Dropdown Pilih Produk
         tk.Label(frame_input, text="Pilih Produk:").grid(row=0, column=0, padx=5)
-        self.combo_produk = ttk.Combobox(frame_input, values=list(self.data_produk.keys()))
+        # Format tampilan: "PLU - Nama Barang"
+        produk_display = [f"{plu} - {info['nama']}" for plu, info in self.data_produk.items()]
+        self.combo_produk = ttk.Combobox(frame_input, values=produk_display, width=30)
         self.combo_produk.grid(row=0, column=1, padx=5)
         self.combo_produk.current(0) # Pilih item pertama secara default
 
@@ -84,8 +81,48 @@ class SistemKasir:
 
     # --- 3. LOGIKA PROGRAM ---
 
+    def load_produk_dari_excel(self):
+        """Membaca data produk dari file Excel"""
+        try:
+            df = pd.read_excel('data.xlsx')
+            # Kolom: 'PLU', 'Nama Barang', 'Harga'
+            produk_dict = {}
+            for _, row in df.iterrows():
+                plu = str(row['plu'])
+                produk_dict[plu] = {
+                    'nama': row['Nama Barang'],
+                    'harga': row['Harga']
+                }
+            return produk_dict
+        except FileNotFoundError:
+            messagebox.showerror("Error", "File produk.xlsx tidak ditemukan!\nMenggunakan data default.")
+            # Data default jika file tidak ditemukan
+            return {
+                "001": {"nama": "Nasi Goreng", "harga": 15000},
+                "002": {"nama": "Mie Ayam", "harga": 12000},
+                "003": {"nama": "Es Teh Manis", "harga": 5000},
+                "004": {"nama": "Kopi Hitam", "harga": 8000},
+                "005": {"nama": "Air Mineral", "harga": 4000}
+            }
+        except Exception as e:
+            messagebox.showerror("Error", f"Gagal membaca file Excel: {str(e)}\nMenggunakan data default.")
+            print(e)
+            # Data default jika ada error
+            return {
+                "001": {"nama": "Nasi Goreng", "harga": 15000},
+                "002": {"nama": "Mie Ayam", "harga": 12000},
+                "003": {"nama": "Es Teh Manis", "harga": 5000},
+                "004": {"nama": "Kopi Hitam", "harga": 8000},
+                "005": {"nama": "Air Mineral", "harga": 4000}
+            }
+
     def tambah_barang(self):
-        nama = self.combo_produk.get()
+        # Ambil pilihan user (format: "PLU - Nama Barang")
+        produk_terpilih = self.combo_produk.get()
+        
+        # Extract PLU dari string (ambil bagian sebelum " - ")
+        plu = produk_terpilih.split(" - ")[0]
+        
         try:
             jumlah = int(self.entry_jumlah.get())
             if jumlah <= 0:
@@ -95,7 +132,9 @@ class SistemKasir:
             messagebox.showerror("Error", "Jumlah harus berupa angka")
             return
 
-        harga = self.data_produk[nama]
+        # Ambil data produk berdasarkan PLU
+        nama = self.data_produk[plu]['nama']
+        harga = self.data_produk[plu]['harga']
         subtotal = harga * jumlah
 
         # Masukkan ke tabel (Treeview)
