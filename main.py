@@ -1,50 +1,49 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-import pandas as pd
+import sqlite3
+import sys
+import os
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 
 class SistemKasir:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("Sistem Kasir Sederhana - Python Tkinter")
-        # self.root.geometry("600x500")
 
-        # --- 1. DATA PRODUK (Baca dari Excel) ---
-        # Format: {'PLU': {'nama': 'Nama Produk', 'harga': Harga}}
-        self.data_produk = self.load_produk_dari_excel()
+        # --- 1. DATA PRODUK (Baca dari SQLite) ---
+        self.data_produk = self.load_produk_dari_db()
         
-        # Variabel untuk menyimpan total belanja
         self.total_belanja = 0
 
         # --- 2. GUI LAYOUT ---
         
-        # Judul
         label_judul = tk.Label(root, text="KASIR RESTORAN KITA", font=("Arial", 16, "bold"))
         label_judul.pack(pady=10)
 
-        # Frame Input
         frame_input = tk.Frame(root)
         frame_input.pack(pady=5)
 
-        # Dropdown Pilih Produk
         tk.Label(frame_input, text="Pilih Produk:").grid(row=0, column=0, padx=5)
-        # Format tampilan: "Plu - Nama Barang"
         produk_display = [f"{plu} - {info['nama']}" for plu, info in self.data_produk.items()]
         self.combo_produk = ttk.Combobox(frame_input, values=produk_display, width=30, validate="focus")
         self.combo_produk.grid(row=0, column=1, padx=5)
-        self.combo_produk.current(0) # Pilih item pertama secara default
+        self.combo_produk.current(0)
 
-        # Input Jumlah
         tk.Label(frame_input, text="Jumlah:").grid(row=0, column=2, padx=5)
         self.entry_jumlah = tk.Entry(frame_input, width=5)
         self.entry_jumlah.grid(row=0, column=3, padx=5)
-        self.entry_jumlah.insert(0, "1") # Default jumlah 1
+        self.entry_jumlah.insert(0, "1")
 
-        # Tombol Tambah
         btn_tambah = tk.Button(frame_input, text="Tambah", command=self.tambah_barang, bg="#4CAF50", fg="white")
         btn_tambah.grid(row=0, column=4, padx=10)
 
-        # Tabel Keranjang Belanja (Treeview)
-        # Columns: Nama, Harga Satuan, Jumlah, Subtotal
         self.tree = ttk.Treeview(root, columns=("Nama", "Harga", "Jumlah", "Subtotal"), show='headings', height=10)
         self.tree.heading("Nama", text="Nama Produk")
         self.tree.heading("Harga", text="Harga")
@@ -57,15 +56,12 @@ class SistemKasir:
         self.tree.column("Subtotal", width=100)
         self.tree.pack(pady=10)
 
-        # Frame Pembayaran
         frame_bawah = tk.Frame(root)
         frame_bawah.pack(fill='x', padx=20)
 
-        # Label Total
         self.label_total = tk.Label(frame_bawah, text="Total: Rp 0", font=("Arial", 14, "bold"))
         self.label_total.pack(anchor='e')
 
-        # Input Uang Bayar
         frame_bayar = tk.Frame(root)
         frame_bayar.pack(pady=10)
         
@@ -81,22 +77,28 @@ class SistemKasir:
 
     # --- 3. LOGIKA PROGRAM ---
 
-    def load_produk_dari_excel(self):
-        """Membaca data produk dari file Excel"""
+    def load_produk_dari_db(self):
+        """Membaca data produk dari SQLite database"""
         try:
-            df = pd.read_excel('data.xlsx')
-            # Kolom: 'Plu', 'Nama Barang', 'Harga'
+            db_path = resource_path('produk.db')
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute("SELECT Plu, `Nama Barang`, Harga FROM produk")
+            rows = cursor.fetchall()
+            
             produk_dict = {}
-            for _, row in df.iterrows():
-                plu = str(row['Plu'])
+            for row in rows:
+                plu = str(row[0])
                 produk_dict[plu] = {
-                    'nama': row['Nama Barang'],
-                    'harga': row['Harga']
+                    'nama': row[1],
+                    'harga': row[2]
                 }
+            
+            conn.close()
             return produk_dict
-        except (Exception, FileNotFoundError) as e:
-            messagebox.showerror("Error", f"Gagal membaca file Excel: {str(e)}\nMenggunakan data default.")
-            # Data default jika ada error
+        except Exception as e:
+            messagebox.showerror("Error", f"Gagal membaca database: {str(e)}\nMenggunakan data default.")
             return {
                 "001": {"nama": "Nasi Goreng", "harga": 15000},
                 "002": {"nama": "Mie Ayam", "harga": 12000},
@@ -106,14 +108,11 @@ class SistemKasir:
             }
 
     def tambah_barang(self):
-        # Ambil pilihan user (format: "PLU - Nama Barang")
         produk_terpilih = self.combo_produk.get()
-        
-        # Extract PLU dari string (ambil bagian sebelum " - ")
         plu = produk_terpilih.split(" - ")[0]
 
         if plu not in self.data_produk:
-            messagebox.showerror("Error", "Produk tidak ditemukan! \nPencarian hanya berdasarkan PLU (Product Lookup Unit).")
+            messagebox.showerror("Error", "Produk tidak ditemukan!")
             return
         
         try:
@@ -125,26 +124,23 @@ class SistemKasir:
             messagebox.showerror("Error", "Jumlah harus berupa angka")
             return
 
-        # Ambil data produk berdasarkan PLU
         nama = self.data_produk[plu]['nama']
         harga = self.data_produk[plu]['harga']
         subtotal = harga * jumlah
 
-        # Masukkan ke tabel (Treeview) / hanya update jika sudah ada
-        if self.tree.get_children():
-            for item in self.tree.get_children():
-                item_data = self.tree.item(item)['values']
-                if item_data[0] == nama:
-                    # Update jumlah dan subtotal
-                    new_jumlah = item_data[2] + jumlah
-                    new_subtotal = item_data[1] * new_jumlah
-                    self.tree.item(item, values=(nama, harga, new_jumlah, new_subtotal))
-                    break
-        else:
-            # Jika produk belum ada di tabel, tambahkan baru
+        item_found = False
+        for item in self.tree.get_children():
+            item_data = self.tree.item(item)['values']
+            if item_data[0] == nama:
+                new_jumlah = item_data[2] + jumlah
+                new_subtotal = item_data[1] * new_jumlah
+                self.tree.item(item, values=(nama, harga, new_jumlah, new_subtotal))
+                item_found = True
+                break
+        
+        if not item_found:
             self.tree.insert("", "end", values=(nama, harga, jumlah, subtotal))
 
-        # Update Total Belanja
         self.total_belanja += subtotal
         self.label_total.config(text=f"Total: Rp {self.total_belanja:,}")
 
@@ -161,18 +157,15 @@ class SistemKasir:
             messagebox.showerror("Error", "Masukkan nominal uang yang valid")
 
     def reset_transaksi(self):
-        # Hapus semua item di tabel
         for item in self.tree.get_children():
             self.tree.delete(item)
         
-        # Reset variabel
         self.total_belanja = 0
         self.label_total.config(text="Total: Rp 0")
         self.entry_bayar.delete(0, 'end')
         self.entry_jumlah.delete(0, 'end')
         self.entry_jumlah.insert(0, "1")
 
-# Menjalankan Program
 if __name__ == "__main__":
     root = tk.Tk()
     app = SistemKasir(root)
