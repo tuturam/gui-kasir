@@ -1,2 +1,7 @@
 # python environment
 .venv/
+
+# pyinstaller 
+/dist/
+/build/
+*.spec
