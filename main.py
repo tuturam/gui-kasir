@@ -27,9 +27,9 @@ class SistemKasir:
 
         # Dropdown Pilih Produk
         tk.Label(frame_input, text="Pilih Produk:").grid(row=0, column=0, padx=5)
-        # Format tampilan: "PLU - Nama Barang"
+        # Format tampilan: "Plu - Nama Barang"
         produk_display = [f"{plu} - {info['nama']}" for plu, info in self.data_produk.items()]
-        self.combo_produk = ttk.Combobox(frame_input, values=produk_display, width=30)
+        self.combo_produk = ttk.Combobox(frame_input, values=produk_display, width=30, validate="focus")
         self.combo_produk.grid(row=0, column=1, padx=5)
         self.combo_produk.current(0) # Pilih item pertama secara default
 
@@ -85,28 +85,17 @@ class SistemKasir:
         """Membaca data produk dari file Excel"""
         try:
             df = pd.read_excel('data.xlsx')
-            # Kolom: 'PLU', 'Nama Barang', 'Harga'
+            # Kolom: 'Plu', 'Nama Barang', 'Harga'
             produk_dict = {}
             for _, row in df.iterrows():
-                plu = str(row['plu'])
+                plu = str(row['Plu'])
                 produk_dict[plu] = {
                     'nama': row['Nama Barang'],
                     'harga': row['Harga']
                 }
             return produk_dict
-        except FileNotFoundError:
-            messagebox.showerror("Error", "File produk.xlsx tidak ditemukan!\nMenggunakan data default.")
-            # Data default jika file tidak ditemukan
-            return {
-                "001": {"nama": "Nasi Goreng", "harga": 15000},
-                "002": {"nama": "Mie Ayam", "harga": 12000},
-                "003": {"nama": "Es Teh Manis", "harga": 5000},
-                "004": {"nama": "Kopi Hitam", "harga": 8000},
-                "005": {"nama": "Air Mineral", "harga": 4000}
-            }
-        except Exception as e:
+        except (Exception, FileNotFoundError) as e:
             messagebox.showerror("Error", f"Gagal membaca file Excel: {str(e)}\nMenggunakan data default.")
-            print(e)
             # Data default jika ada error
             return {
                 "001": {"nama": "Nasi Goreng", "harga": 15000},
@@ -122,6 +111,10 @@ class SistemKasir:
         
         # Extract PLU dari string (ambil bagian sebelum " - ")
         plu = produk_terpilih.split(" - ")[0]
+
+        if plu not in self.data_produk:
+            messagebox.showerror("Error", "Produk tidak ditemukan! \nPencarian hanya berdasarkan PLU (Product Lookup Unit).")
+            return
         
         try:
             jumlah = int(self.entry_jumlah.get())
@@ -137,8 +130,19 @@ class SistemKasir:
         harga = self.data_produk[plu]['harga']
         subtotal = harga * jumlah
 
-        # Masukkan ke tabel (Treeview)
-        self.tree.insert("", "end", values=(nama, harga, jumlah, subtotal))
+        # Masukkan ke tabel (Treeview) / hanya update jika sudah ada
+        if self.tree.get_children():
+            for item in self.tree.get_children():
+                item_data = self.tree.item(item)['values']
+                if item_data[0] == nama:
+                    # Update jumlah dan subtotal
+                    new_jumlah = item_data[2] + jumlah
+                    new_subtotal = item_data[1] * new_jumlah
+                    self.tree.item(item, values=(nama, harga, new_jumlah, new_subtotal))
+                    break
+        else:
+            # Jika produk belum ada di tabel, tambahkan baru
+            self.tree.insert("", "end", values=(nama, harga, jumlah, subtotal))
 
         # Update Total Belanja
         self.total_belanja += subtotal
